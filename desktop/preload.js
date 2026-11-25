@@ -3,6 +3,10 @@ const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("ptNative", {
   platform: process.platform,
+  /** scheme để Chrome gọi về app sau khi đăng nhập Google */
+  authScheme: ipcRenderer.sendSync("pt:scheme"),
+  /** mở trang đăng nhập Google bằng trình duyệt thật */
+  openExternal: (url) => ipcRenderer.send("pt:open-external", url),
   /** số tin chưa đọc -> số đỏ trên icon */
   setBadge: (n) => ipcRenderer.send("pt:badge", n),
   /** hiện thông báo hệ thống */

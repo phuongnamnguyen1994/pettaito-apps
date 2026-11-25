@@ -28,6 +28,8 @@ const config = {
   directories: { output: path.join("dist", key) },
   files: ["main.js", "preload.js", "updater.js", "variant.json", "assets/**"],
   extraMetadata: { version, productName: v.name },
+  // link "pettaito-hub://" / "pettaito-clickon://" -> đưa vé đăng nhập Google từ Chrome về app
+  protocols: [{ name: `${v.name} login`, schemes: [`pettaito-${v.slug}`] }],
   mac: {
     icon: "assets/icon.png",
     category: "public.app-category.productivity",

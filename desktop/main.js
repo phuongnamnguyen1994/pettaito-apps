@@ -15,9 +15,37 @@ let unread = 0;
 app.setName(variant.name);
 if (process.platform === "win32") app.setAppUserModelId(`com.pettaito.${variant.slug}`);
 
-// chỉ chạy 1 cửa sổ: mở lại thì đưa cửa sổ cũ lên
+// Đăng nhập Google: Google cấm đăng nhập trong app nhúng -> mở Chrome thật, xong Chrome gọi
+// "pettaito-<slug>://auth#access_token=…" về app -> app nạp phiên đăng nhập.
+const SCHEME = `pettaito-${variant.slug}`;
+let pendingAuth = null;
+if (process.defaultApp) app.setAsDefaultProtocolClient(SCHEME, process.execPath, [path.resolve(process.argv[1] || ".")]);
+else app.setAsDefaultProtocolClient(SCHEME);
+function handleDeepLink(url) {
+  if (!url || !url.startsWith(`${SCHEME}://`)) return;
+  const hash = url.includes("#") ? url.slice(url.indexOf("#")) : "";
+  if (!/access_token=/.test(hash)) return;
+  const target = `${SITE}/login${hash}`;
+  if (!win) {
+    pendingAuth = target;
+    return;
+  }
+  win.loadURL(target);
+  show();
+}
+app.on("open-url", (e, url) => {
+  e.preventDefault();
+  if (app.isReady()) handleDeepLink(url);
+  else pendingAuth = url;
+});
+
+// chỉ chạy 1 cửa sổ: mở lại thì đưa cửa sổ cũ lên (Windows: link đăng nhập đến qua đây)
 if (!app.requestSingleInstanceLock()) app.quit();
-app.on("second-instance", () => show());
+app.on("second-instance", (_e, argv) => {
+  const link = argv.find((a) => a.startsWith(`${SCHEME}://`));
+  if (link) handleDeepLink(link);
+  else show();
+});
 
 function icon(file) {
   return nativeImage.createFromPath(path.join(__dirname, "assets", file));
@@ -48,8 +76,6 @@ function createWindow() {
       spellcheck: false,
     },
   });
-  // Google không cho đăng nhập trong "trình duyệt nhúng" -> giả làm Chrome thường
-  win.webContents.setUserAgent(win.webContents.getUserAgent().replace(/\s*(Electron|pettaito[-\w]*|clickon[-\w]*)\/\S+/gi, ""));
   win.loadURL(variant.url);
 
   // link ngoài (Google Drive, web khác…) -> mở bằng trình duyệt; link trong app -> mở ngay trong cửa sổ
@@ -61,9 +87,7 @@ function createWindow() {
     shell.openExternal(url);
     return { action: "deny" };
   });
-  // đăng nhập Google: các trang đăng nhập phải mở ngay trong app (không văng ra trình duyệt)
-  const AUTH = /^https:\/\/([a-z0-9-]+\.supabase\.co\/auth\/|accounts\.google\.com(\.vn)?\/|accounts\.youtube\.com\/)/i;
-  const inApp = (url) => url.startsWith(SITE) || AUTH.test(url);
+  const inApp = (url) => url.startsWith(SITE);
   win.webContents.on("will-navigate", (e, url) => {
     if (!inApp(url)) {
       e.preventDefault();
@@ -157,6 +181,13 @@ ipcMain.on("pt:notify", (_e, n) => {
   note.show();
 });
 
+ipcMain.on("pt:scheme", (e) => (e.returnValue = SCHEME));
+
+// trang đăng nhập nhờ mở Chrome (chỉ cho trang đăng nhập Google / Supabase)
+ipcMain.on("pt:open-external", (_e, url) => {
+  if (/^https:\/\/([a-z0-9-]+\.supabase\.co\/auth\/|accounts\.google\.com\/)/i.test(String(url))) shell.openExternal(url);
+});
+
 ipcMain.handle("pt:focused", () => !!win && win.isVisible() && win.isFocused());
 
 app.whenReady().then(() => {
@@ -174,6 +205,10 @@ app.whenReady().then(() => {
   buildTray();
   app.on("activate", show);
   updater.start(variant.name, () => refreshTrayMenu());
+  // mở app bằng link đăng nhập (Windows: nằm trong argv; Mac: open-url trước khi sẵn sàng)
+  const link = pendingAuth || process.argv.find((a) => a.startsWith(`${SCHEME}://`));
+  pendingAuth = null;
+  if (link) handleDeepLink(link.startsWith(SITE) ? `${SCHEME}://auth${link.slice(link.indexOf("#"))}` : link);
 });
 
 app.on("before-quit", (e) => {
