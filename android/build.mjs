@@ -63,9 +63,13 @@ const m = new TwaManifest({
   appVersionName: versionName,
   signingKey: { path: keystore, alias: "pettaito" },
   shortcuts: [],
+  minSdkVersion: 24,
 });
 await new TwaGenerator().createTwaProject(out, m, new ConsoleLog("twa"));
 await m.saveToFile(path.join(out, "twa-manifest.json"));
+// androidbrowserhelper cần Android 7+ (minSdk 24)
+const gradle = path.join(out, "app/build.gradle");
+fs.writeFileSync(gradle, fs.readFileSync(gradle, "utf8").replace(/minSdkVersion\s+\d+/, "minSdkVersion 24"));
 
 const sdk = process.env.ANDROID_HOME || process.env.ANDROID_SDK_ROOT;
 const bt = fs
