@@ -38,8 +38,9 @@ const versionName = process.env.APP_VERSION || "1.0.0";
 fs.rmSync(out, { recursive: true, force: true });
 fs.mkdirSync(out, { recursive: true });
 
-const m = await TwaManifest.fromWebManifest(v.manifest);
-Object.assign(m, {
+const base = await TwaManifest.fromWebManifest(v.manifest);
+const m = new TwaManifest({
+  ...base.toJson(),
   packageId: v.packageId,
   host: "pettaito.com",
   name: v.name,
@@ -47,7 +48,8 @@ Object.assign(m, {
   startUrl: v.start,
   iconUrl: v.icon,
   maskableIconUrl: v.icon,
-  themeColor: m.themeColor ?? v.theme,
+  themeColor: v.theme,
+  themeColorDark: v.theme,
   navigationColor: v.theme,
   navigationColorDark: v.theme,
   navigationDividerColor: v.theme,
