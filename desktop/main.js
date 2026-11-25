@@ -47,6 +47,8 @@ function createWindow() {
       spellcheck: false,
     },
   });
+  // Google không cho đăng nhập trong "trình duyệt nhúng" -> giả làm Chrome thường
+  win.webContents.setUserAgent(win.webContents.getUserAgent().replace(/\s*(Electron|pettaito[-\w]*|clickon[-\w]*)\/\S+/gi, ""));
   win.loadURL(variant.url);
 
   // link ngoài (Google Drive, web khác…) -> mở bằng trình duyệt; link trong app -> mở ngay trong cửa sổ
@@ -58,8 +60,11 @@ function createWindow() {
     shell.openExternal(url);
     return { action: "deny" };
   });
+  // đăng nhập Google: các trang đăng nhập phải mở ngay trong app (không văng ra trình duyệt)
+  const AUTH = /^https:\/\/([a-z0-9-]+\.supabase\.co\/auth\/|accounts\.google\.com(\.vn)?\/|accounts\.youtube\.com\/)/i;
+  const inApp = (url) => url.startsWith(SITE) || AUTH.test(url);
   win.webContents.on("will-navigate", (e, url) => {
-    if (!url.startsWith(SITE)) {
+    if (!inApp(url)) {
       e.preventDefault();
       shell.openExternal(url);
     }
