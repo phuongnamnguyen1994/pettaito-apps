@@ -26,7 +26,7 @@ const config = {
   copyright: "PetTaiTo",
   artifactName: `${v.name}-\${os}-\${arch}.\${ext}`,
   directories: { output: path.join("dist", key) },
-  files: ["main.js", "preload.js", "variant.json", "assets/**"],
+  files: ["main.js", "preload.js", "updater.js", "variant.json", "assets/**"],
   extraMetadata: { version, productName: v.name },
   mac: {
     icon: "assets/icon.png",

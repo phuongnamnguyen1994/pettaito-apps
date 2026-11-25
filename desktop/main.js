@@ -4,6 +4,7 @@
 const { app, BrowserWindow, Menu, Tray, nativeImage, shell, session, desktopCapturer, ipcMain, Notification } = require("electron");
 const path = require("path");
 const variant = require("./variant.json"); // { name, slug, url, color }
+const updater = require("./updater");
 
 const SITE = "https://pettaito.com";
 let win = null;
@@ -102,9 +103,17 @@ function buildTray() {
   const img = icon("tray.png");
   tray = new Tray(img);
   tray.setToolTip(variant.name);
+  refreshTrayMenu();
+  tray.on("click", show);
+}
+
+function refreshTrayMenu() {
+  if (!tray) return;
+  const up = updater.hasUpdate();
   const menu = () =>
     Menu.buildFromTemplate([
       { label: `Mở ${variant.name}`, click: show },
+      ...(up ? [{ label: `⬆️ Cập nhật lên bản ${up.version} & mở lại`, click: () => updater.install(variant.name) }] : []),
       { type: "separator" },
       {
         label: "Mở cùng máy tính",
@@ -113,6 +122,7 @@ function buildTray() {
         click: (it) => app.setLoginItemSettings({ openAtLogin: it.checked, openAsHidden: true }),
       },
       { type: "separator" },
+      { label: `Phiên bản ${app.getVersion()}`, enabled: false },
       {
         label: "Thoát",
         click: () => {
@@ -122,7 +132,6 @@ function buildTray() {
       },
     ]);
   tray.setContextMenu(menu());
-  tray.on("click", show);
 }
 
 // trang web báo số tin chưa đọc -> số đỏ trên icon Dock / thanh tác vụ
@@ -164,9 +173,17 @@ app.whenReady().then(() => {
   createWindow();
   buildTray();
   app.on("activate", show);
+  updater.start(variant.name, () => refreshTrayMenu());
 });
 
-app.on("before-quit", () => (quitting = true));
+app.on("before-quit", (e) => {
+  quitting = true;
+  // có bản mới đã tải -> cài luôn khi thoát
+  if (updater.hasUpdate()) {
+    e.preventDefault();
+    updater.install(variant.name);
+  }
+});
 app.on("window-all-closed", () => {
   /* chạy nền */
 });
