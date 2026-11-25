@@ -76,7 +76,7 @@ jobs:
 
   release:
     needs: [desktop, android]
-    if: always() && (needs.desktop.result == 'success' || needs.android.result == 'success')
+    if: needs.desktop.result == 'success' && needs.android.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
@@ -88,6 +88,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           ls -la out
+          # chỉ đăng khi đủ cả 6 file (Mac chip M + Windows + Android cho 2 app) — thiếu là dừng, giữ nguyên bản cũ
+          N=$(ls out | wc -l); echo "Số file: $N"; [ "$N" -eq 6 ] || { echo "Thiếu file, không đăng"; exit 1; }
           R="${{ github.repository }}"; T="v${APP_VERSION}"
           for i in 1 2 3 4 5; do
             gh release view "$T" --repo "$R" >/dev/null 2>&1 || gh release create "$T" --repo "$R" --title "PetTaiTo apps ${APP_VERSION}" --notes "Bản tự đóng gói từ commit ${{ github.sha }}" --latest && break

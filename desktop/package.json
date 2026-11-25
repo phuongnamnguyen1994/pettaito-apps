@@ -2,7 +2,7 @@
   "name": "pettaito-desktop",
   "productName": "PetTaiTo",
   "version": "1.0.0",
-  "description": "PetTaiTo / ClickOn — chat, task & lịch làm việc",
+  "description": "PetTaiTo / ClickOn \u2014 chat, task & l\u1ecbch l\u00e0m vi\u1ec7c",
   "author": "PetTaiTo",
   "main": "main.js",
   "private": true,
@@ -12,6 +12,7 @@
   },
   "devDependencies": {
     "electron": "^45.0.0",
-    "electron-builder": "^26.0.0"
+    "electron-builder": "^26.0.0",
+    "@electron/asar": "^4.0.0"
   }
 }

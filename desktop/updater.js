@@ -5,8 +5,27 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const { spawn } = require("child_process");
+const { Readable } = require("stream");
+const { pipeline } = require("stream/promises");
 
 const REPO = "phuongnamnguyen1994/pettaito-apps";
+// cho phép thử nghiệm với máy chủ giả (PT_UPDATE_API=http://127.0.0.1:…)
+const API = process.env.PT_UPDATE_API || `https://api.github.com/repos/${REPO}`;
+const notes = new Set(); // giữ thông báo để bấm vẫn chạy (không bị dọn rác)
+function notify(opts, onClick) {
+  if (!Notification.isSupported()) return;
+  const n = new Notification(opts);
+  notes.add(n);
+  n.on("close", () => notes.delete(n));
+  if (onClick) n.on("click", () => { notes.delete(n); onClick(); });
+  n.show();
+}
+/** file cài phù hợp máy */
+function assetName(name) {
+  // chỉ có bản Mac chip M (arm64)
+  if (process.platform === "darwin") return `${name}-mac-arm64.dmg`;
+  return `${name}-win-x64.exe`;
+}
 let ready = null; // { version, file }
 let onReadyCb = () => {};
 let checking = false;
@@ -19,38 +38,38 @@ const newer = (a, b) => {
 };
 
 async function check(name, manual = false) {
-  if (ready || !app.isPackaged || checking) return;
+  if (ready || (!app.isPackaged && !process.env.PT_UPDATE_API) || checking) return;
   checking = true;
   lastCheck = Date.now();
   try {
-    const r = await net.fetch(`https://api.github.com/repos/${REPO}/releases/latest`, { headers: { Accept: "application/vnd.github+json" } });
+    const r = await net.fetch(`${API}/releases/latest`, { headers: { Accept: "application/vnd.github+json" } });
     if (!r.ok) return;
     const rel = await r.json();
     const version = String(rel.tag_name || "").replace(/^v/, "");
     if (!version || !newer(version, app.getVersion())) {
-      if (manual && Notification.isSupported()) new Notification({ title: name, body: `Đang dùng bản mới nhất (${app.getVersion()})` }).show();
+      if (manual) notify({ title: name, body: `Đang dùng bản mới nhất (${app.getVersion()})` });
       return;
     }
-    if (manual && Notification.isSupported()) new Notification({ title: name, body: `Đang tải bản ${version}… xong sẽ báo` }).show();
-    const want = process.platform === "darwin" ? `${name}-mac-universal.dmg` : `${name}-win-x64.exe`;
+    const want = assetName(name);
     const asset = (rel.assets || []).find((a) => a.name === want);
     if (!asset) return; // bản mới chưa đăng xong
     const file = path.join(os.tmpdir(), `pt-update-${version}-${want}`);
     if (!fs.existsSync(file) || fs.statSync(file).size !== asset.size) {
+      notify({ title: name, body: `Đang tải ngầm bản mới ${version} (${Math.round(asset.size / 1048576)} MB)… app vẫn dùng bình thường` });
       const res = await net.fetch(asset.browser_download_url);
-      if (!res.ok) return;
+      if (!res.ok || !res.body) return;
       const tmp = file + ".part";
-      fs.writeFileSync(tmp, Buffer.from(await res.arrayBuffer()));
-      if (fs.statSync(tmp).size !== asset.size) return;
-      fs.renameSync(tmp, file);
+      // ghi dần từng phần ra ổ đĩa, không giữ cả file trong bộ nhớ -> app không bị đứng khi tải
+      await pipeline(Readable.fromWeb(res.body), fs.createWriteStream(tmp));
+      if ((await fs.promises.stat(tmp)).size !== asset.size) return;
+      await fs.promises.rename(tmp, file);
     }
     ready = { version, file };
     onReadyCb(ready);
-    if (Notification.isSupported()) {
-      const n = new Notification({ title: `${name} có bản mới ${version}`, body: "Bấm để cập nhật ngay (mất vài giây). Hoặc để đó — tự cập nhật khi thoát app." });
-      n.on("click", () => install(name));
-      n.show();
-    }
+    notify(
+      { title: `${name} có bản mới ${version}`, body: "Bấm để cập nhật ngay (mất vài giây). Hoặc để đó — tự cập nhật khi thoát app." },
+      () => install(name),
+    );
   } catch (e) {
     console.error("update check failed", e);
   } finally {

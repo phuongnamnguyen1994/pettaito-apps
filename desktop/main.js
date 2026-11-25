@@ -174,7 +174,7 @@ ipcMain.on("pt:badge", (_e, n) => {
 // thông báo từ trang web (khi cửa sổ không được chọn); bấm vào -> mở đúng nhóm
 ipcMain.on("pt:notify", (_e, n) => {
   if (!Notification.isSupported()) return;
-  const note = new Notification({ title: String(n.title || variant.name), body: String(n.body || ""), silent: false, icon: icon("icon.png") });
+  const note = new Notification({ title: String(n.title || variant.name), body: String(n.body || ""), silent: false, icon: icon(process.platform === "darwin" ? "icon-mac.png" : "icon.png") });
   note.on("click", () => {
     show();
     if (n.url && win) win.webContents.send("pt:open", n.url);
