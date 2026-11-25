@@ -9,6 +9,8 @@ const { spawn } = require("child_process");
 const REPO = "phuongnamnguyen1994/pettaito-apps";
 let ready = null; // { version, file }
 let onReadyCb = () => {};
+let checking = false;
+let lastCheck = 0;
 
 const newer = (a, b) => {
   const x = a.split(".").map(Number), y = b.split(".").map(Number);
@@ -16,14 +18,20 @@ const newer = (a, b) => {
   return false;
 };
 
-async function check(name) {
-  if (ready || !app.isPackaged) return;
+async function check(name, manual = false) {
+  if (ready || !app.isPackaged || checking) return;
+  checking = true;
+  lastCheck = Date.now();
   try {
     const r = await net.fetch(`https://api.github.com/repos/${REPO}/releases/latest`, { headers: { Accept: "application/vnd.github+json" } });
     if (!r.ok) return;
     const rel = await r.json();
     const version = String(rel.tag_name || "").replace(/^v/, "");
-    if (!version || !newer(version, app.getVersion())) return;
+    if (!version || !newer(version, app.getVersion())) {
+      if (manual && Notification.isSupported()) new Notification({ title: name, body: `Đang dùng bản mới nhất (${app.getVersion()})` }).show();
+      return;
+    }
+    if (manual && Notification.isSupported()) new Notification({ title: name, body: `Đang tải bản ${version}… xong sẽ báo` }).show();
     const want = process.platform === "darwin" ? `${name}-mac-universal.dmg` : `${name}-win-x64.exe`;
     const asset = (rel.assets || []).find((a) => a.name === want);
     if (!asset) return; // bản mới chưa đăng xong
@@ -45,7 +53,14 @@ async function check(name) {
     }
   } catch (e) {
     console.error("update check failed", e);
+  } finally {
+    checking = false;
   }
+}
+
+/** kiểm tra ngay (bấm menu) hoặc khi mở cửa sổ — tối đa 1 lần / 5 phút */
+function checkNow(name, manual = false) {
+  if (manual || Date.now() - lastCheck > 5 * 60_000) check(name, manual);
 }
 
 /** Cài bản đã tải rồi mở lại app */
@@ -74,7 +89,7 @@ function install(name) {
 function start(name, onReady) {
   onReadyCb = onReady || onReadyCb;
   setTimeout(() => check(name), 20_000);
-  setInterval(() => check(name), 3 * 3600_000);
+  setInterval(() => check(name), 30 * 60_000);
 }
 
-module.exports = { start, install, hasUpdate: () => ready };
+module.exports = { start, install, checkNow, hasUpdate: () => ready };

@@ -25,7 +25,7 @@ function handleDeepLink(url) {
   if (!url || !url.startsWith(`${SCHEME}://`)) return;
   const hash = url.includes("#") ? url.slice(url.indexOf("#")) : "";
   if (!/access_token=/.test(hash)) return;
-  const target = `${SITE}/login${hash}`;
+  const target = `${SITE}/login?app=${Date.now()}${hash}`; // ?app= để tải lại trang hẳn (chỉ đổi # thì trang không nhận)
   if (!win) {
     pendingAuth = target;
     return;
@@ -52,6 +52,7 @@ function icon(file) {
 }
 
 function show() {
+  updater.checkNow(variant.name);
   if (!win) return createWindow();
   if (win.isMinimized()) win.restore();
   win.show();
@@ -137,7 +138,7 @@ function refreshTrayMenu() {
   const menu = () =>
     Menu.buildFromTemplate([
       { label: `Mở ${variant.name}`, click: show },
-      ...(up ? [{ label: `⬆️ Cập nhật lên bản ${up.version} & mở lại`, click: () => updater.install(variant.name) }] : []),
+      ...(up ? [{ label: `⬆️ Cập nhật lên bản ${up.version} & mở lại`, click: () => updater.install(variant.name) }] : [{ label: "Kiểm tra cập nhật", click: () => updater.checkNow(variant.name, true) }]),
       { type: "separator" },
       {
         label: "Mở cùng máy tính",
