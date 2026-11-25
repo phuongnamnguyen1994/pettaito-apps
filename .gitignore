@@ -1,0 +1,8 @@
+node_modules
+dist
+build
+desktop/assets
+desktop/variant.json
+desktop/builder.json
+*.p12
+*.jks
