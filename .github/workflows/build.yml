@@ -88,4 +88,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           ls -la out
-          gh release create "v${APP_VERSION}" out/* --repo "${{ github.repository }}" --title "PetTaiTo apps ${APP_VERSION}" --notes "Bản tự đóng gói từ commit ${{ github.sha }}" --latest
+          R="${{ github.repository }}"; T="v${APP_VERSION}"
+          for i in 1 2 3 4 5; do
+            gh release view "$T" --repo "$R" >/dev/null 2>&1 || gh release create "$T" --repo "$R" --title "PetTaiTo apps ${APP_VERSION}" --notes "Bản tự đóng gói từ commit ${{ github.sha }}" --latest && break
+            sleep 10
+          done
+          for f in out/*; do
+            for i in 1 2 3 4 5; do gh release upload "$T" "$f" --repo "$R" --clobber && break; sleep 15; done
+          done
+          gh release edit "$T" --repo "$R" --latest
