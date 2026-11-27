@@ -26,7 +26,7 @@ const config = {
   copyright: "PetTaiTo",
   artifactName: `${v.name}-\${os}-\${arch}.\${ext}`,
   directories: { output: path.join("dist", key) },
-  files: ["main.js", "preload.js", "updater.js", "variant.json", "assets/**"],
+  files: ["main.js", "preload.js", "updater.js", "dock.js", "variant.json", "assets/**"],
   extraMetadata: { version, productName: v.name },
   // link "pettaito-hub://" / "pettaito-clickon://" -> đưa vé đăng nhập Google từ Chrome về app
   protocols: [{ name: `${v.name} login`, schemes: [`pettaito-${v.slug}`] }],
@@ -38,6 +38,7 @@ const config = {
     hardenedRuntime: false,
     extendInfo: {
       NSMicrophoneUsageDescription: "Dùng micro cho cuộc gọi và ghi chép cuộc họp",
+      NSAppleEventsUsageDescription: "Xếp cửa sổ Viber / Zalo dính cạnh Pettaito (chỉ dời vị trí cửa sổ, không đọc tin nhắn)",
       NSCameraUsageDescription: "Dùng camera cho cuộc gọi video",
     },
   },
@@ -73,14 +74,14 @@ if (process.platform === "darwin") {
     const archs = execSync(`lipo -archs "${app}/Contents/MacOS/${v.name}"`).toString().trim().split(/\s+/).sort().join(" ");
     must(archs === arch.split(" ").sort().join(" "), `${dir}: chip ${archs}`);
     const files = asarOf(path.join(app, "Contents/Resources/app.asar"));
-    for (const f of ["/main.js", "/preload.js", "/updater.js", "/variant.json"]) must(files.includes(f), `${dir}: có ${f}`);
+    for (const f of ["/main.js", "/preload.js", "/updater.js", "/dock.js", "/variant.json"]) must(files.includes(f), `${dir}: có ${f}`);
     const plist = fs.readFileSync(path.join(app, "Contents/Info.plist"), "utf8");
     must(plist.includes(`pettaito-${v.slug}`), `${dir}: đăng ký link đăng nhập pettaito-${v.slug}://`);
   }
   for (const a of ["arm64"]) must(fs.existsSync(path.join(out, `${v.name}-mac-${a}.dmg`)), `có file ${v.name}-mac-${a}.dmg`);
 } else if (process.platform === "win32") {
   const files = asarOf(path.join(out, "win-unpacked", "resources", "app.asar"));
-  for (const f of ["/main.js", "/preload.js", "/updater.js", "/variant.json"]) must(files.includes(f), `win: có ${f}`);
+  for (const f of ["/main.js", "/preload.js", "/updater.js", "/dock.js", "/variant.json"]) must(files.includes(f), `win: có ${f}`);
   must(fs.existsSync(path.join(out, `${v.name}-win-x64.exe`)), `có file ${v.name}-win-x64.exe`);
 }
 // chạy thử phần tự cập nhật bằng Node (cú pháp + nạp được)

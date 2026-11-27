@@ -23,4 +23,7 @@ contextBridge.exposeInMainWorld("ptNative", {
   toggleMini: () => ipcRenderer.send("pt:mini-toggle"),
   hideMini: () => ipcRenderer.send("pt:mini-hide"),
   openMain: (url) => ipcRenderer.send("pt:open-main", url),
+  /** ghép dính Viber / Zalo cạnh cửa sổ Pettaito; trả về true nếu đang ghép */
+  toggleDock: (app) => ipcRenderer.invoke("pt:dock-toggle", app),
+  dockCurrent: () => ipcRenderer.invoke("pt:dock-current"),
 });

@@ -6,6 +6,7 @@ const path = require("path");
 const fs = require("fs");
 const variant = require("./variant.json"); // { name, slug, url, color }
 const updater = require("./updater");
+const dock = require("./dock");
 
 const SITE = "https://pettaito.com";
 let win = null;
@@ -104,7 +105,10 @@ function createWindow() {
     e.preventDefault();
     win.hide();
   });
-  win.on("closed", () => (win = null));
+  win.on("closed", () => {
+    dock.detach();
+    win = null;
+  });
 }
 
 // ---------------------------------------------------------------- Pettaito thu nhỏ (luôn nằm trên cùng)
@@ -173,6 +177,13 @@ function toggleMini() {
     mini.focus();
   }
 }
+async function toggleDock(appName) {
+  if (!win) createWindow();
+  show();
+  const on = await dock.toggle(win, appName);
+  refreshTrayMenu();
+  return on;
+}
 function openMain(url) {
   show();
   if (url && win) win.loadURL(url.startsWith("http") ? url : `${SITE}${url}`);
@@ -212,6 +223,8 @@ function refreshTrayMenu() {
     Menu.buildFromTemplate([
       { label: `Mở ${variant.name}`, click: show },
       { label: "Pettaito thu nhỏ (luôn nổi)", accelerator: "CommandOrControl+Shift+Space", click: toggleMini },
+      { label: "Ghép dính Viber bên cạnh", type: "checkbox", checked: dock.current() === "viber", click: () => toggleDock("viber") },
+      { label: "Ghép dính Zalo bên cạnh", type: "checkbox", checked: dock.current() === "zalo", click: () => toggleDock("zalo") },
       ...(up ? [{ label: `⬆️ Cập nhật lên bản ${up.version} & mở lại`, click: () => updater.install(variant.name) }] : [{ label: "Kiểm tra cập nhật", click: () => updater.checkNow(variant.name, true) }]),
       { type: "separator" },
       {
@@ -317,6 +330,8 @@ ipcMain.on("pt:open-external", (_e, url) => {
 });
 
 ipcMain.on("pt:mini-toggle", () => toggleMini());
+ipcMain.handle("pt:dock-toggle", (_e, appName) => toggleDock(appName === "zalo" ? "zalo" : "viber"));
+ipcMain.handle("pt:dock-current", () => dock.current());
 ipcMain.on("pt:mini-hide", () => mini && mini.hide());
 ipcMain.on("pt:open-main", (_e, url) => openMain(url));
 ipcMain.handle("pt:focused", () => !!win && win.isVisible() && win.isFocused());
