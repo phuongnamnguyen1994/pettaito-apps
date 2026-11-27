@@ -55,7 +55,8 @@ async function check(name, manual = false) {
     if (!asset) return; // bản mới chưa đăng xong
     const file = path.join(os.tmpdir(), `pt-update-${version}-${want}`);
     if (!fs.existsSync(file) || fs.statSync(file).size !== asset.size) {
-      notify({ title: name, body: `Đang tải ngầm bản mới ${version} (${Math.round(asset.size / 1048576)} MB)… app vẫn dùng bình thường` });
+      // chỉ báo khi người dùng tự bấm "Kiểm tra cập nhật" (tự động thì im lặng, tránh làm mọi người lo)
+      if (manual) notify({ title: name, body: `Đang tải bản ${version}…` });
       const res = await net.fetch(asset.browser_download_url);
       if (!res.ok || !res.body) return;
       const tmp = file + ".part";
@@ -66,10 +67,9 @@ async function check(name, manual = false) {
     }
     ready = { version, file };
     onReadyCb(ready);
-    notify(
-      { title: `${name} có bản mới ${version}`, body: "Bấm để cập nhật ngay (mất vài giây). Hoặc để đó — tự cập nhật khi thoát app." },
-      () => install(name),
-    );
+    // tự động: không hiện thông báo — bản mới tự cài khi thoát app; tray vẫn có mục "Cập nhật lên bản …"
+    if (manual)
+      notify({ title: `${name} ${version}`, body: "Bản mới đã sẵn sàng. Bấm để mở lại app với bản mới." }, () => install(name));
   } catch (e) {
     console.error("update check failed", e);
   } finally {
