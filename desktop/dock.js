@@ -14,6 +14,10 @@ let win = null;
 let busy = false;
 let pending = null;
 let ps = null;
+let lastPlaced = null; // vị trí mình vừa đặt cho app kia (để không nhầm là người dùng kéo)
+let watchTimer = null;
+let macWatch = null;
+let lastSeen = null; // { x, y, w, h, min, front }
 
 function osa(script) {
   return new Promise((resolve) => execFile("osascript", ["-e", script], { timeout: 4000 }, (err, out) => resolve(err ? null : String(out).trim())));
@@ -22,23 +26,42 @@ function osa(script) {
 function winHelper() {
   if (ps && !ps.killed) return ps;
   const script = `
-$sig = '[DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr h, IntPtr a, int x, int y, int cx, int cy, uint f);
-[DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr h, int c);'
-Add-Type -MemberDefinition $sig -Name W -Namespace P
+Add-Type -TypeDefinition @"
+using System; using System.Runtime.InteropServices;
+public struct RC { public int L, T, R, B; }
+public static class PW {
+  [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr h, IntPtr a, int x, int y, int cx, int cy, uint f);
+  [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr h, int c);
+  [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out RC r);
+  [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr h);
+  [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+}
+"@
 while ($null -ne ($line = [Console]::In.ReadLine())) {
   $a = $line.Split(' ')
   $p = Get-Process -Name $a[0] -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1
-  if (-not $p) { continue }
+  if (-not $p) { if ($a[1] -eq 'rect') { [Console]::Out.WriteLine('null'); [Console]::Out.Flush() }; continue }
   $h = $p.MainWindowHandle
   switch ($a[1]) {
-    'pos' { [P.W]::ShowWindow($h, 9) | Out-Null; [P.W]::SetWindowPos($h, [IntPtr]::Zero, [int]$a[2], [int]$a[3], [int]$a[4], [int]$a[5], 0x0010) | Out-Null }
-    'raise' { [P.W]::SetWindowPos($h, [IntPtr]::Zero, 0, 0, 0, 0, 0x0013) | Out-Null }
-    'min' { [P.W]::ShowWindow($h, 6) | Out-Null }
-    'restore' { [P.W]::ShowWindow($h, 4) | Out-Null }
+    'pos' { [PW]::ShowWindow($h, 9) | Out-Null; [PW]::SetWindowPos($h, [IntPtr]::Zero, [int]$a[2], [int]$a[3], [int]$a[4], [int]$a[5], 0x0010) | Out-Null }
+    'raise' { [PW]::SetWindowPos($h, [IntPtr]::Zero, 0, 0, 0, 0, 0x0013) | Out-Null }
+    'min' { [PW]::ShowWindow($h, 6) | Out-Null }
+    'restore' { [PW]::ShowWindow($h, 4) | Out-Null }
+    'rect' { $r = New-Object RC; [PW]::GetWindowRect($h, [ref]$r) | Out-Null; $m = [PW]::IsIconic($h); $f = ([PW]::GetForegroundWindow() -eq $h); [Console]::Out.WriteLine("[$($r.L),$($r.T),$($r.R - $r.L),$($r.B - $r.T),$($m.ToString().ToLower()),$($f.ToString().ToLower())]"); [Console]::Out.Flush() }
   }
 }`;
   ps = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script], { windowsHide: true });
   ps.on("exit", () => (ps = null));
+  let buf = "";
+  ps.stdout.on("data", (d) => {
+    buf += d.toString();
+    let i;
+    while ((i = buf.indexOf("\n")) >= 0) {
+      const line = buf.slice(0, i).trim();
+      buf = buf.slice(i + 1);
+      onReport(line);
+    }
+  });
   ps.stdin.on("error", () => {});
   return ps;
 }
@@ -63,6 +86,7 @@ async function place() {
   if (busy) return void (pending = true);
   busy = true;
   const r = target();
+  lastPlaced = { ...r, at: Date.now() };
   const name = APPS[state.app];
   if (isMac) {
     await osa(`tell application "System Events" to tell process "${name}"
@@ -98,16 +122,120 @@ async function setMin(min) {
 
 let timer = null;
 const onMove = () => {
+  if (following) return;
   clearTimeout(timer);
   timer = setTimeout(place, 16);
 };
 const onFocus = () => void raise();
-const onHide = () => void setMin(true);
+const onHide = () => {
+  if (!following) void setMin(true);
+};
 const onShow = () => {
+  if (following) return;
   void setMin(false).then(place);
 };
 
+/** app kia báo vị trí / trạng thái -> Pettaito đi theo (người dùng kéo / thu nhỏ / bấm vào Viber) */
+function onReport(line) {
+  if (!state || !win || win.isDestroyed() || !line || line === "null") return;
+  let v;
+  try {
+    v = JSON.parse(line);
+  } catch {
+    return;
+  }
+  let [x, y, w, h, min, front] = v;
+  if (isWin) {
+    const d = screen.screenToDipRect(win, { x, y, width: w, height: h });
+    ({ x, y, width: w, height: h } = d);
+  }
+  const prev = lastSeen;
+  lastSeen = { x, y, w, h, min, front };
+  // thu nhỏ / mở lại theo Viber
+  if (min && !win.isMinimized()) {
+    following = true;
+    win.minimize();
+    following = false;
+    return;
+  }
+  if (!min && prev && prev.min && win.isMinimized()) {
+    following = true;
+    win.restore();
+    following = false;
+  }
+  // bấm vào Viber -> Pettaito nổi lên cạnh (không giành bàn phím)
+  if (front && prev && !prev.front && !win.isFocused()) win.moveTop();
+  if (min) return;
+  // Viber bị kéo / đổi cỡ bởi người dùng -> Pettaito dời theo
+  const near = (a, b) => Math.abs(a - b) <= 3;
+  const mine = lastPlaced && near(lastPlaced.x, x) && near(lastPlaced.y, y) && near(lastPlaced.width, w) && near(lastPlaced.height, h);
+  if (mine || busy || (lastPlaced && Date.now() - lastPlaced.at < 500)) return;
+  if (prev && near(prev.x, x) && near(prev.y, y) && near(prev.w, w) && near(prev.h, h)) {
+    // đứng yên: so với chỗ Pettaito đang muốn đặt
+    const t = target();
+    if (near(t.x, x) && near(t.y, y) && near(t.width, w) && near(t.height, h)) return;
+  }
+  state.width = Math.round(w);
+  const b = win.getBounds();
+  const nb = { x: Math.round(state.side === "right" ? x - b.width : x + w), y: Math.round(y), width: b.width, height: Math.round(h) };
+  lastPlaced = { x: Math.round(x), y: Math.round(y), width: Math.round(w), height: Math.round(h), at: Date.now() };
+  following = true;
+  win.setBounds(nb);
+  following = false;
+}
+let following = false; // đang dời Pettaito theo Viber -> không dời ngược Viber
+
+function startWatch(name) {
+  stopWatch();
+  if (isMac) {
+    const jxa = `
+      const se = Application("System Events");
+      while (true) {
+        try {
+          const p = se.processes.byName(${JSON.stringify(name)});
+          if (!p.visible()) { console.log("[0,0,0,0,true,false]"); }
+          else if (p.windows.length === 0) { console.log("null"); }
+          else {
+            const w = p.windows[0];
+            const pos = w.position(), sz = w.size();
+            const m = w.attributes.byName("AXMinimized").value();
+            console.log(JSON.stringify([pos[0], pos[1], sz[0], sz[1], m, p.frontmost()]));
+          }
+        } catch (e) { console.log("null"); }
+        delay(0.3);
+      }`;
+    macWatch = spawn("osascript", ["-l", "JavaScript", "-e", jxa]);
+    let buf = "";
+    const read = (d) => {
+      buf += d.toString();
+      let i;
+      while ((i = buf.indexOf("\n")) >= 0) {
+        const line = buf.slice(0, i).trim();
+        buf = buf.slice(i + 1);
+        onReport(line);
+      }
+    };
+    macWatch.stderr.on("data", read); // console.log của JXA ra stderr
+    macWatch.stdout.on("data", read);
+    macWatch.on("exit", () => (macWatch = null));
+  } else if (isWin) {
+    watchTimer = setInterval(() => {
+      try {
+        winHelper().stdin.write(`${name} rect\n`);
+      } catch {}
+    }, 300);
+  }
+}
+function stopWatch() {
+  if (macWatch) macWatch.kill();
+  macWatch = null;
+  if (watchTimer) clearInterval(watchTimer);
+  watchTimer = null;
+  lastSeen = null;
+}
+
 function detach() {
+  stopWatch();
   if (win && !win.isDestroyed()) {
     for (const ev of ["move", "moved", "resize", "resized"]) win.off(ev, onMove);
     win.off("focus", onFocus);
@@ -165,6 +293,7 @@ async function toggle(mainWin, app, side = "right") {
   win.on("restore", onShow);
   setTimeout(place, 600); // chờ app kia mở xong
   setTimeout(place, 2000);
+  startWatch(name);
   return true;
 }
 
