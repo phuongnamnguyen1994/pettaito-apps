@@ -1,4 +1,4 @@
-// Ghép dính Viber / Zalo cạnh cửa sổ Pettaito (side by side).
+// Ghép dính Viber / Zalo / Claude cạnh cửa sổ Pettaito (side by side).
 // Pettaito di chuyển / đổi cỡ -> app kia đi theo, cao bằng nhau; bấm vào Pettaito -> app kia nổi lên cùng;
 // ẩn / thu nhỏ Pettaito -> app kia thu nhỏ theo. Chỉ điều khiển VỊ TRÍ cửa sổ, không đọc nội dung.
 // Mac: dùng AppleScript (cần quyền Trợ năng / Accessibility). Windows: PowerShell + user32 SetWindowPos.
@@ -7,7 +7,8 @@ const { screen, systemPreferences, dialog, shell } = require("electron");
 
 const isMac = process.platform === "darwin";
 const isWin = process.platform === "win32";
-const APPS = { viber: "Viber", zalo: "Zalo" };
+const APPS = { viber: "Viber", zalo: "Zalo", claude: "Claude" };
+const SCHEMES = { viber: "viber://", zalo: "zalo://", claude: "claude://" };
 
 let state = null; // { app: "viber"|"zalo", side: "right"|"left", width }
 let win = null;
@@ -241,7 +242,7 @@ function detach() {
   state = null;
 }
 
-/** bật ghép: app = "viber" | "zalo"; gọi lại với app đang ghép = tách ra */
+/** bật ghép: app = "viber" | "zalo" | "claude"; gọi lại với app đang ghép = tách ra */
 async function toggle(mainWin, app, side = "right") {
   if (state && state.app === app) {
     detach();
@@ -258,7 +259,7 @@ async function toggle(mainWin, app, side = "right") {
       detail:
         `Để ${name} dính cạnh Pettaito, macOS cần cấp quyền "Trợ năng" (Accessibility) cho app Pettaito.\n\n` +
         `Vào Cài đặt hệ thống → Quyền riêng tư & Bảo mật → Trợ năng → bật Pettaito, rồi bấm "Ghép ${name}" lần nữa.\n\n` +
-        `Pettaito chỉ dời vị trí cửa sổ, không đọc tin nhắn ${name}.`,
+        `Pettaito chỉ dời vị trí cửa sổ, không đọc nội dung ${name}.`,
       buttons: ["Mở Cài đặt", "Để sau"],
     });
     if (r.response === 0) shell.openExternal("x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility");
@@ -268,7 +269,7 @@ async function toggle(mainWin, app, side = "right") {
   if (isMac) await new Promise((r) => execFile("open", ["-g", "-a", name], () => r(null)));
   else if (isWin) {
     winHelper();
-    shell.openExternal(app === "viber" ? "viber://" : "zalo://").catch(() => {});
+    shell.openExternal(SCHEMES[app]).catch(() => {});
   }
   win = mainWin;
   // chia màn hình: Pettaito 40% bên trái, app kia 60% bên phải (hoặc ngược lại)

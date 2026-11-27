@@ -225,6 +225,7 @@ function refreshTrayMenu() {
       { label: "Pettaito thu nhỏ (luôn nổi)", accelerator: "CommandOrControl+Shift+Space", click: toggleMini },
       { label: "Ghép dính Viber bên cạnh", type: "checkbox", checked: dock.current() === "viber", click: () => toggleDock("viber") },
       { label: "Ghép dính Zalo bên cạnh", type: "checkbox", checked: dock.current() === "zalo", click: () => toggleDock("zalo") },
+      { label: "Ghép dính Claude bên cạnh", type: "checkbox", checked: dock.current() === "claude", click: () => toggleDock("claude") },
       ...(up ? [{ label: `⬆️ Cập nhật lên bản ${up.version} & mở lại`, click: () => updater.install(variant.name) }] : [{ label: "Kiểm tra cập nhật", click: () => updater.checkNow(variant.name, true) }]),
       { type: "separator" },
       {
@@ -330,7 +331,7 @@ ipcMain.on("pt:open-external", (_e, url) => {
 });
 
 ipcMain.on("pt:mini-toggle", () => toggleMini());
-ipcMain.handle("pt:dock-toggle", (_e, appName) => toggleDock(appName === "zalo" ? "zalo" : "viber"));
+ipcMain.handle("pt:dock-toggle", (_e, appName) => toggleDock(appName === "zalo" || appName === "claude" ? appName : "viber"));
 ipcMain.handle("pt:dock-current", () => dock.current());
 ipcMain.on("pt:mini-hide", () => mini && mini.hide());
 ipcMain.on("pt:open-main", (_e, url) => openMain(url));
