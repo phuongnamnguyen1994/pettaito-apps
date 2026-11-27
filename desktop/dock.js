@@ -122,7 +122,7 @@ async function setMin(min) {
 
 let timer = null;
 const onMove = () => {
-  if (following) return;
+  if (following || Date.now() < followUntil) return;
   clearTimeout(timer);
   timer = setTimeout(place, 16);
 };
@@ -179,45 +179,39 @@ function onReport(line) {
   const b = win.getBounds();
   const nb = { x: Math.round(state.side === "right" ? x - b.width : x + w), y: Math.round(y), width: b.width, height: Math.round(h) };
   lastPlaced = { x: Math.round(x), y: Math.round(y), width: Math.round(w), height: Math.round(h), at: Date.now() };
+  followUntil = Date.now() + 900;
   following = true;
   win.setBounds(nb);
   following = false;
 }
 let following = false; // đang dời Pettaito theo Viber -> không dời ngược Viber
+let followUntil = 0; // sau khi dời Pettaito theo Viber: một lúc không dời ngược Viber (tránh giật khi đang kéo Viber)
 
 function startWatch(name) {
   stopWatch();
   if (isMac) {
-    const jxa = `
-      const se = Application("System Events");
-      while (true) {
-        try {
-          const p = se.processes.byName(${JSON.stringify(name)});
-          if (!p.visible()) { console.log("[0,0,0,0,true,false]"); }
-          else if (p.windows.length === 0) { console.log("null"); }
-          else {
-            const w = p.windows[0];
-            const pos = w.position(), sz = w.size();
-            const m = w.attributes.byName("AXMinimized").value();
-            console.log(JSON.stringify([pos[0], pos[1], sz[0], sz[1], m, p.frontmost()]));
-          }
-        } catch (e) { console.log("null"); }
-        delay(0.3);
-      }`;
-    macWatch = spawn("osascript", ["-l", "JavaScript", "-e", jxa]);
-    let buf = "";
-    const read = (d) => {
-      buf += d.toString();
-      let i;
-      while ((i = buf.indexOf("\n")) >= 0) {
-        const line = buf.slice(0, i).trim();
-        buf = buf.slice(i + 1);
-        onReport(line);
-      }
-    };
-    macWatch.stderr.on("data", read); // console.log của JXA ra stderr
-    macWatch.stdout.on("data", read);
-    macWatch.on("exit", () => (macWatch = null));
+    // hỏi vị trí cửa sổ app kia mỗi 0,4 giây bằng AppleScript (cùng cách đang dùng để dời cửa sổ)
+    const q = `tell application "System Events"
+      if not (exists process "${name}") then return "null"
+      tell process "${name}"
+        if not visible then return "[0,0,0,0,true,false]"
+        if (count of windows) = 0 then return "null"
+        set p to position of window 1
+        set z to size of window 1
+        set m to value of attribute "AXMinimized" of window 1
+        set f to frontmost
+        return "[" & (item 1 of p) & "," & (item 2 of p) & "," & (item 1 of z) & "," & (item 2 of z) & "," & m & "," & f & "]"
+      end tell
+    end tell`;
+    let asking = false;
+    watchTimer = setInterval(() => {
+      if (asking) return;
+      asking = true;
+      osa(q).then((out) => {
+        asking = false;
+        if (out) onReport(out);
+      });
+    }, 400);
   } else if (isWin) {
     watchTimer = setInterval(() => {
       try {
