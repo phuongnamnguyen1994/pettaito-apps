@@ -7,6 +7,7 @@ const fs = require("fs");
 const variant = require("./variant.json"); // { name, slug, url, color }
 const updater = require("./updater");
 const dock = require("./dock");
+const claudePanel = require("./claude-panel");
 
 const SITE = "https://pettaito.com";
 let win = null;
@@ -81,6 +82,8 @@ function createWindow() {
     },
   });
   win.loadURL(variant.url);
+  // trang tải lại -> báo lại khung Claude đang mở để trang chừa chỗ
+  win.webContents.on("did-finish-load", () => claudePanel.refresh());
 
   // link ngoài (Google Drive, web khác…) -> mở bằng trình duyệt; link trong app -> mở ngay trong cửa sổ
   win.webContents.setWindowOpenHandler(({ url }) => {
@@ -226,6 +229,7 @@ function refreshTrayMenu() {
       { label: "Ghép dính Viber bên cạnh", type: "checkbox", checked: dock.current() === "viber", click: () => toggleDock("viber") },
       { label: "Ghép dính Zalo bên cạnh", type: "checkbox", checked: dock.current() === "zalo", click: () => toggleDock("zalo") },
       { label: "Ghép dính Claude bên cạnh", type: "checkbox", checked: dock.current() === "claude", click: () => toggleDock("claude") },
+      { label: "Khung Claude trong Pettaito", click: () => { show(); claudePanel.toggle(win); } },
       ...(up ? [{ label: `⬆️ Cập nhật lên bản ${up.version} & mở lại`, click: () => updater.install(variant.name) }] : [{ label: "Kiểm tra cập nhật", click: () => updater.checkNow(variant.name, true) }]),
       { type: "separator" },
       {
@@ -333,6 +337,11 @@ ipcMain.on("pt:open-external", (_e, url) => {
 ipcMain.on("pt:mini-toggle", () => toggleMini());
 ipcMain.handle("pt:dock-toggle", (_e, appName) => toggleDock(appName === "zalo" || appName === "claude" ? appName : "viber"));
 ipcMain.handle("pt:dock-current", () => dock.current());
+// khung Claude bên phải
+ipcMain.handle("pt:claude-toggle", () => claudePanel.toggle(win));
+ipcMain.handle("pt:claude-open", () => claudePanel.isOpen());
+ipcMain.on("pt:claude-width", (_e, w) => claudePanel.setWidth(Number(w)));
+ipcMain.on("pt:claude-reload", () => claudePanel.reload());
 ipcMain.on("pt:mini-hide", () => mini && mini.hide());
 ipcMain.on("pt:open-main", (_e, url) => openMain(url));
 ipcMain.handle("pt:focused", () => !!win && win.isVisible() && win.isFocused());

@@ -26,4 +26,14 @@ contextBridge.exposeInMainWorld("ptNative", {
   /** ghép dính Viber / Zalo cạnh cửa sổ Pettaito; trả về true nếu đang ghép */
   toggleDock: (app) => ipcRenderer.invoke("pt:dock-toggle", app),
   dockCurrent: () => ipcRenderer.invoke("pt:dock-current"),
+  /** khung Claude (claude.ai) bên phải cửa sổ */
+  toggleClaude: () => ipcRenderer.invoke("pt:claude-toggle"),
+  claudeOpen: () => ipcRenderer.invoke("pt:claude-open"),
+  setClaudeWidth: (w) => ipcRenderer.send("pt:claude-width", w),
+  reloadClaude: () => ipcRenderer.send("pt:claude-reload"),
+  onClaudePanel: (cb) => {
+    const f = (_e, s) => cb(s);
+    ipcRenderer.on("pt:claude-panel", f);
+    return () => ipcRenderer.removeListener("pt:claude-panel", f);
+  },
 });
