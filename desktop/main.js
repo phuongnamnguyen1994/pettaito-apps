@@ -172,9 +172,28 @@ ipcMain.on("pt:badge", (_e, n) => {
 });
 
 // thông báo từ trang web (khi cửa sổ không được chọn); bấm vào -> mở đúng nhóm
-ipcMain.on("pt:notify", (_e, n) => {
+// ảnh đại diện nhóm / người gửi cho thông báo (Windows hiện được; Mac luôn dùng icon app)
+const avatarCache = new Map();
+async function notifyIcon(url) {
+  const fallback = icon(process.platform === "darwin" ? "icon-mac.png" : "icon.png");
+  if (process.platform === "darwin" || typeof url !== "string" || !url.startsWith("/api/files/avatars/")) return fallback;
+  if (avatarCache.has(url)) return avatarCache.get(url);
+  try {
+    const res = await session.fromPartition("persist:pettaito").fetch(SITE + url);
+    if (!res.ok) return fallback;
+    const img = nativeImage.createFromBuffer(Buffer.from(await res.arrayBuffer())).resize({ width: 96, height: 96 });
+    if (img.isEmpty()) return fallback;
+    if (avatarCache.size > 200) avatarCache.clear();
+    avatarCache.set(url, img);
+    return img;
+  } catch {
+    return fallback;
+  }
+}
+
+ipcMain.on("pt:notify", async (_e, n) => {
   if (!Notification.isSupported()) return;
-  const note = new Notification({ title: String(n.title || variant.name), body: String(n.body || ""), silent: false, icon: icon(process.platform === "darwin" ? "icon-mac.png" : "icon.png") });
+  const note = new Notification({ title: String(n.title || variant.name), body: String(n.body || ""), silent: false, icon: await notifyIcon(n.icon) });
   note.on("click", () => {
     show();
     if (n.url && win) win.webContents.send("pt:open", n.url);
