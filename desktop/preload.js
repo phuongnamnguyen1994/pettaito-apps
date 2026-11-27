@@ -15,4 +15,8 @@ contextBridge.exposeInMainWorld("ptNative", {
   isFocused: () => ipcRenderer.invoke("pt:focused"),
   /** bấm thông báo -> mở đúng trang */
   onOpen: (cb) => ipcRenderer.on("pt:open", (_e, url) => cb(url)),
+  /** kéo ảnh / file ra màn hình máy tính bằng FILE GỐC: tải sẵn khi rê chuột vào, kéo là ra file thật */
+  prefetchFile: (url, name) => ipcRenderer.send("pt:drag-prefetch", { url, name }),
+  dragReady: (url) => ipcRenderer.sendSync("pt:drag-ready", url),
+  dragFile: (url) => ipcRenderer.send("pt:drag", url),
 });

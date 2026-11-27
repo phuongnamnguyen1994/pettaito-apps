@@ -191,6 +191,40 @@ async function notifyIcon(url) {
   }
 }
 
+// ===== Kéo file gốc từ chat ra màn hình máy tính =====
+const fsp = require("fs/promises");
+const DRAG_DIR = path.join(require("os").tmpdir(), "pettaito-drag");
+const dragCache = new Map(); // url -> { file, icon } | Promise
+fsp.rm(DRAG_DIR, { recursive: true, force: true }).catch(() => {});
+ipcMain.on("pt:drag-prefetch", (_e, { url, name }) => {
+  if (typeof url !== "string" || !url.startsWith(SITE + "/api/files/") || dragCache.has(url)) return;
+  const job = (async () => {
+    try {
+      const res = await session.fromPartition("persist:pettaito").fetch(url);
+      if (!res.ok) throw new Error(String(res.status));
+      const safe = String(name || "file").replace(/[\/:*?"<>|]/g, "_").slice(0, 150) || "file";
+      const dir = path.join(DRAG_DIR, String(dragCache.size));
+      await fsp.mkdir(dir, { recursive: true });
+      const file = path.join(dir, safe);
+      await fsp.writeFile(file, Buffer.from(await res.arrayBuffer()));
+      let img = nativeImage.createThumbnailFromPath ? await nativeImage.createThumbnailFromPath(file, { width: 96, height: 96 }).catch(() => null) : null;
+      if (!img || img.isEmpty()) img = icon("icon.png").resize({ width: 64, height: 64 });
+      dragCache.set(url, { file, icon: img });
+    } catch {
+      dragCache.delete(url);
+    }
+  })();
+  dragCache.set(url, job);
+});
+ipcMain.on("pt:drag-ready", (e, url) => {
+  const v = dragCache.get(url);
+  e.returnValue = !!v && !(v instanceof Promise);
+});
+ipcMain.on("pt:drag", (e, url) => {
+  const v = dragCache.get(url);
+  if (v && !(v instanceof Promise)) e.sender.startDrag({ file: v.file, icon: v.icon });
+});
+
 ipcMain.on("pt:notify", async (_e, n) => {
   if (!Notification.isSupported()) return;
   const note = new Notification({ title: String(n.title || variant.name), body: String(n.body || ""), silent: false, icon: await notifyIcon(n.icon) });
