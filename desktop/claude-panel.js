@@ -24,12 +24,35 @@ const save = () => {
   } catch {}
 };
 
+// Trang Pettaito có thể đang phóng to / thu nhỏ (⌘+ / ⌘-): khung Claude tính theo điểm cửa sổ,
+// còn trang tính theo px CSS = điểm / zoom. Phải đổi đơn vị, nếu không vạch ngăn bị lệch vào giữa vùng chat.
+const zoomOf = () => {
+  try {
+    return host.webContents.getZoomFactor() || 1;
+  } catch {
+    return 1;
+  }
+};
+let lastZoom = 1;
+let zoomTimer = null;
+
 function layout() {
   if (!host || host.isDestroyed() || !view || !open) return;
   const [w, h] = host.getContentSize();
   const pw = Math.round(Math.min(Math.max(width, 320), Math.max(320, w - 360)));
   view.setBounds({ x: w - pw, y: 0, width: pw, height: h });
-  host.webContents.send("pt:claude-panel", { open: true, width: pw });
+  lastZoom = zoomOf();
+  host.webContents.send("pt:claude-panel", { open: true, width: pw / lastZoom });
+}
+
+// phím tắt zoom trong menu không phát sự kiện -> kiểm tra nhẹ mỗi 0,5 giây khi khung đang mở
+function watchZoom(on) {
+  clearInterval(zoomTimer);
+  zoomTimer = on
+    ? setInterval(() => {
+        if (host && !host.isDestroyed() && open && zoomOf() !== lastZoom) layout();
+      }, 500)
+    : null;
 }
 
 function ensure() {
@@ -62,6 +85,7 @@ function toggle(win) {
   if (open) {
     win.contentView.removeChildView(view);
     open = false;
+    watchZoom(false);
     win.webContents.send("pt:claude-panel", { open: false, width: 0 });
     win.webContents.focus();
     return false;
@@ -70,13 +94,15 @@ function toggle(win) {
   win.contentView.addChildView(view);
   open = true;
   layout();
+  watchZoom(true);
   view.webContents.focus();
   return true;
 }
 
 function setWidth(w) {
   if (!Number.isFinite(w)) return;
-  width = Math.round(w);
+  // trang gửi px CSS -> đổi sang điểm cửa sổ
+  width = Math.round(w * zoomOf());
   layout();
   save();
 }
