@@ -19,4 +19,8 @@ contextBridge.exposeInMainWorld("ptNative", {
   prefetchFile: (url, name) => ipcRenderer.send("pt:drag-prefetch", { url, name }),
   dragReady: (url) => ipcRenderer.sendSync("pt:drag-ready", url),
   dragFile: (url) => ipcRenderer.send("pt:drag", url),
+  /** Pettaito thu nhỏ nổi trên màn hình */
+  toggleMini: () => ipcRenderer.send("pt:mini-toggle"),
+  hideMini: () => ipcRenderer.send("pt:mini-hide"),
+  openMain: (url) => ipcRenderer.send("pt:open-main", url),
 });

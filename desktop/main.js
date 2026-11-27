@@ -1,13 +1,15 @@
 // App máy tính PetTaiTo / ClickOn (Mac + Windows)
 // Mở thẳng pettaito.com trong cửa sổ riêng; đóng cửa sổ = chạy nền (icon trên thanh menu / khay hệ thống),
 // vẫn nhận thông báo & số đỏ trên icon. Nội dung luôn là bản web mới nhất -> không cần cập nhật app khi web đổi.
-const { app, BrowserWindow, Menu, Tray, nativeImage, shell, session, desktopCapturer, ipcMain, Notification } = require("electron");
+const { app, BrowserWindow, Menu, Tray, nativeImage, shell, session, desktopCapturer, ipcMain, Notification, globalShortcut, screen } = require("electron");
 const path = require("path");
+const fs = require("fs");
 const variant = require("./variant.json"); // { name, slug, url, color }
 const updater = require("./updater");
 
 const SITE = "https://pettaito.com";
 let win = null;
+let mini = null; // khung thu nhỏ nổi trên màn hình
 let tray = null;
 let quitting = false;
 let unread = 0;
@@ -105,6 +107,77 @@ function createWindow() {
   win.on("closed", () => (win = null));
 }
 
+// ---------------------------------------------------------------- Pettaito thu nhỏ (luôn nằm trên cùng)
+const MINI_FILE = () => path.join(app.getPath("userData"), "mini.json");
+function miniBounds() {
+  try {
+    const b = JSON.parse(fs.readFileSync(MINI_FILE(), "utf8"));
+    const area = screen.getDisplayMatching(b).workArea;
+    if (b.x >= area.x - 50 && b.y >= area.y - 50 && b.x < area.x + area.width && b.y < area.y + area.height) return b;
+  } catch {}
+  const a = screen.getPrimaryDisplay().workArea;
+  return { width: 340, height: 500, x: a.x + a.width - 360, y: a.y + a.height - 520 };
+}
+function createMini() {
+  mini = new BrowserWindow({
+    ...miniBounds(),
+    minWidth: 280,
+    minHeight: 320,
+    frame: false,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    fullscreenable: false,
+    minimizable: false,
+    title: `${variant.name} mini`,
+    backgroundColor: "#090909",
+    webPreferences: {
+      preload: path.join(__dirname, "preload.js"),
+      partition: "persist:pettaito",
+      spellcheck: false,
+    },
+  });
+  // nổi trên cả Viber / Zalo đang mở toàn màn hình
+  mini.setAlwaysOnTop(true, "floating");
+  mini.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  mini.loadURL(`${SITE}/team/mini`);
+  mini.webContents.setWindowOpenHandler(({ url }) => {
+    if (url.startsWith(SITE)) openMain(url);
+    else shell.openExternal(url);
+    return { action: "deny" };
+  });
+  mini.webContents.on("will-navigate", (e, url) => {
+    if (url.startsWith(`${SITE}/team/mini`)) return;
+    e.preventDefault();
+    if (url.startsWith(SITE)) openMain(url);
+    else shell.openExternal(url);
+  });
+  const save = () => {
+    try {
+      if (mini && !mini.isDestroyed()) fs.writeFileSync(MINI_FILE(), JSON.stringify(mini.getBounds()));
+    } catch {}
+  };
+  mini.on("moved", save);
+  mini.on("resized", save);
+  mini.on("close", (e) => {
+    if (quitting) return;
+    e.preventDefault();
+    mini.hide();
+  });
+  mini.on("closed", () => (mini = null));
+}
+function toggleMini() {
+  if (!mini) return createMini();
+  if (mini.isVisible()) mini.hide();
+  else {
+    mini.showInactive();
+    mini.focus();
+  }
+}
+function openMain(url) {
+  show();
+  if (url && win) win.loadURL(url.startsWith("http") ? url : `${SITE}${url}`);
+}
+
 function setupSession() {
   const ses = session.fromPartition("persist:pettaito");
   // mic / camera / thông báo / chia sẻ màn hình cho pettaito.com
@@ -138,6 +211,7 @@ function refreshTrayMenu() {
   const menu = () =>
     Menu.buildFromTemplate([
       { label: `Mở ${variant.name}`, click: show },
+      { label: "Pettaito thu nhỏ (luôn nổi)", accelerator: "CommandOrControl+Shift+Space", click: toggleMini },
       ...(up ? [{ label: `⬆️ Cập nhật lên bản ${up.version} & mở lại`, click: () => updater.install(variant.name) }] : [{ label: "Kiểm tra cập nhật", click: () => updater.checkNow(variant.name, true) }]),
       { type: "separator" },
       {
@@ -242,6 +316,9 @@ ipcMain.on("pt:open-external", (_e, url) => {
   if (/^https:\/\/([a-z0-9-]+\.supabase\.co\/auth\/|accounts\.google\.com\/)/i.test(String(url))) shell.openExternal(url);
 });
 
+ipcMain.on("pt:mini-toggle", () => toggleMini());
+ipcMain.on("pt:mini-hide", () => mini && mini.hide());
+ipcMain.on("pt:open-main", (_e, url) => openMain(url));
 ipcMain.handle("pt:focused", () => !!win && win.isVisible() && win.isFocused());
 
 app.whenReady().then(() => {
@@ -257,6 +334,10 @@ app.whenReady().then(() => {
   setupSession();
   createWindow();
   buildTray();
+  // phím tắt toàn máy: bật / ẩn khung thu nhỏ từ bất kỳ app nào (Viber, Zalo…)
+  try {
+    globalShortcut.register("CommandOrControl+Shift+Space", toggleMini);
+  } catch {}
   app.on("activate", show);
   updater.start(variant.name, () => refreshTrayMenu());
   // mở app bằng link đăng nhập (Windows: nằm trong argv; Mac: open-url trước khi sẵn sàng)
@@ -265,6 +346,7 @@ app.whenReady().then(() => {
   if (link) handleDeepLink(link.startsWith(SITE) ? `${SCHEME}://auth${link.slice(link.indexOf("#"))}` : link);
 });
 
+app.on("will-quit", () => globalShortcut.unregisterAll());
 app.on("before-quit", (e) => {
   quitting = true;
   // có bản mới đã tải -> cài luôn khi thoát
