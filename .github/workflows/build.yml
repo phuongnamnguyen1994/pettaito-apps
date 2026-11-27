@@ -22,11 +22,28 @@ jobs:
         os: [macos-latest, windows-latest]
         variant: [pettaito, clickon]
     runs-on: ${{ matrix.os }}
+    env:
+      MAC_P12: ${{ secrets.MAC_SIGN_P12_B64 }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: Chữ ký cố định cho app Mac (lấy từ Secrets)
+        if: runner.os == 'macOS' && env.MAC_P12 != ''
+        run: |
+          echo "$MAC_P12" | base64 -D > "$RUNNER_TEMP/sign.p12"
+          KC="$RUNNER_TEMP/sign.keychain-db"
+          security create-keychain -p ci "$KC"
+          security set-keychain-settings "$KC"
+          security unlock-keychain -p ci "$KC"
+          security import "$RUNNER_TEMP/sign.p12" -k "$KC" -P pettaito -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k ci "$KC" > /dev/null
+          security list-keychains -d user -s "$KC" $(security list-keychains -d user | tr -d '"')
+          ID=$(security find-identity -p codesigning "$KC" | awk '/PetTaiTo Code Signing/{print $2; exit}')
+          if [ -z "$ID" ]; then echo "Không tìm thấy chữ ký trong keychain"; security find-identity -p codesigning "$KC"; exit 1; fi
+          echo "MAC_SIGN_ID=$ID" >> "$GITHUB_ENV"
+          echo "MAC_SIGN_KEYCHAIN=$KC" >> "$GITHUB_ENV"
       - name: Cài công cụ
         working-directory: desktop
         run: npm install --no-fund --no-audit

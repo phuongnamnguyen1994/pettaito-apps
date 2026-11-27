@@ -27,6 +27,7 @@ const config = {
   artifactName: `${v.name}-\${os}-\${arch}.\${ext}`,
   directories: { output: path.join("dist", key) },
   files: ["main.js", "preload.js", "updater.js", "dock.js", "variant.json", "assets/**"],
+  afterSign: "./sign-mac.js", // chữ ký cố định -> giữ quyền macOS qua các lần cập nhật
   extraMetadata: { version, productName: v.name },
   // link "pettaito-hub://" / "pettaito-clickon://" -> đưa vé đăng nhập Google từ Chrome về app
   protocols: [{ name: `${v.name} login`, schemes: [`pettaito-${v.slug}`] }],
