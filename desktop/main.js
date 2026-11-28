@@ -8,6 +8,7 @@ const variant = require("./variant.json"); // { name, slug, url, color }
 const updater = require("./updater");
 const dock = require("./dock");
 const claudePanel = require("./claude-panel");
+const focus = require("./focus");
 
 const SITE = "https://pettaito.com";
 let win = null;
@@ -225,6 +226,8 @@ function refreshTrayMenu() {
   const menu = () =>
     Menu.buildFromTemplate([
       { label: `Mở ${variant.name}`, click: show },
+      ...focus.menuItems(),
+      { type: "separator" },
       { label: "Pettaito thu nhỏ (luôn nổi)", accelerator: "CommandOrControl+Shift+Space", click: toggleMini },
       { label: "Ghép dính Viber bên cạnh", type: "checkbox", checked: dock.current() === "viber", click: () => toggleDock("viber") },
       { label: "Ghép dính Zalo bên cạnh", type: "checkbox", checked: dock.current() === "zalo", click: () => toggleDock("zalo") },
@@ -319,6 +322,7 @@ ipcMain.on("pt:drag", (e, url) => {
 
 ipcMain.on("pt:notify", async (_e, n) => {
   if (!Notification.isSupported()) return;
+  if (focus.blocks(n)) return; // đang Không làm phiền
   const note = new Notification({ title: String(n.title || variant.name), body: String(n.body || ""), silent: false, icon: await notifyIcon(n.icon) });
   note.on("click", () => {
     show();
@@ -328,6 +332,17 @@ ipcMain.on("pt:notify", async (_e, n) => {
 });
 
 ipcMain.on("pt:scheme", (e) => (e.returnValue = SCHEME));
+
+// Không làm phiền: trang hỏi trạng thái / bật tắt từ trong app
+ipcMain.handle("pt:focus-get", () => focus.info());
+ipcMain.on("pt:focus-set", (_e, mode) => focus.set(["1h", "evening", "morning", "forever", "off"].includes(mode) ? mode : "off"));
+
+/** cập nhật biểu tượng 🌙 trên thanh menu + báo cho trang */
+function applyFocusUi() {
+  const f = focus.info();
+  if (tray && process.platform === "darwin") tray.setTitle(f.on ? "☾" : "");
+  for (const w of [win, mini]) if (w && !w.isDestroyed()) w.webContents.send("pt:focus", f);
+}
 
 // trang đăng nhập nhờ mở Chrome (chỉ cho trang đăng nhập Google / Supabase)
 ipcMain.on("pt:open-external", (_e, url) => {
@@ -359,6 +374,11 @@ app.whenReady().then(() => {
   setupSession();
   createWindow();
   buildTray();
+  focus.init(() => {
+    refreshTrayMenu();
+    applyFocusUi();
+  });
+  applyFocusUi();
   // phím tắt toàn máy: bật / ẩn khung thu nhỏ từ bất kỳ app nào (Viber, Zalo…)
   try {
     globalShortcut.register("CommandOrControl+Shift+Space", toggleMini);

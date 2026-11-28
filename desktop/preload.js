@@ -31,6 +31,14 @@ contextBridge.exposeInMainWorld("ptNative", {
   claudeOpen: () => ipcRenderer.invoke("pt:claude-open"),
   setClaudeWidth: (w) => ipcRenderer.send("pt:claude-width", w),
   reloadClaude: () => ipcRenderer.send("pt:claude-reload"),
+  /** Không làm phiền: { on, until, label, allowImportant } */
+  focusInfo: () => ipcRenderer.invoke("pt:focus-get"),
+  setFocus: (mode) => ipcRenderer.send("pt:focus-set", mode),
+  onFocus: (cb) => {
+    const f = (_e, s) => cb(s);
+    ipcRenderer.on("pt:focus", f);
+    return () => ipcRenderer.removeListener("pt:focus", f);
+  },
   onClaudePanel: (cb) => {
     const f = (_e, s) => cb(s);
     ipcRenderer.on("pt:claude-panel", f);
