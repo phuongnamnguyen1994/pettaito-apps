@@ -323,7 +323,13 @@ ipcMain.on("pt:drag", (e, url) => {
 ipcMain.on("pt:notify", async (_e, n) => {
   if (!Notification.isSupported()) return;
   if (focus.blocks(n)) return; // đang Không làm phiền
-  const note = new Notification({ title: String(n.title || variant.name), body: String(n.body || ""), silent: false, icon: await notifyIcon(n.icon) });
+  // kiểu báo: chỉ tiếng -> kêu "ting" của máy, không hiện khung (nhắc nhở hẹn giờ thì vẫn hiện)
+  const st = focus.style();
+  if (st === "sound" && !n.alarm) {
+    shell.beep();
+    return;
+  }
+  const note = new Notification({ title: String(n.title || variant.name), body: String(n.body || ""), silent: st === "silent" && !n.alarm, icon: await notifyIcon(n.icon) });
   note.on("click", () => {
     show();
     if (n.url && win) win.webContents.send("pt:open", n.url);
@@ -336,6 +342,7 @@ ipcMain.on("pt:scheme", (e) => (e.returnValue = SCHEME));
 // Không làm phiền: trang hỏi trạng thái / bật tắt từ trong app
 ipcMain.handle("pt:focus-get", () => focus.info());
 ipcMain.on("pt:focus-set", (_e, mode) => focus.set(["1h", "evening", "morning", "forever", "off"].includes(mode) ? mode : "off"));
+ipcMain.on("pt:notify-style", (_e, v) => focus.setStyle(v));
 
 /** cập nhật biểu tượng 🌙 trên thanh menu + báo cho trang */
 function applyFocusUi() {

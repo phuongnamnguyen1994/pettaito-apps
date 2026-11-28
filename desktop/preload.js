@@ -34,6 +34,8 @@ contextBridge.exposeInMainWorld("ptNative", {
   /** Không làm phiền: { on, until, label, allowImportant } */
   focusInfo: () => ipcRenderer.invoke("pt:focus-get"),
   setFocus: (mode) => ipcRenderer.send("pt:focus-set", mode),
+  /** kiểu báo: "both" | "silent" (chỉ thông báo) | "sound" (chỉ tiếng) */
+  setNotifyStyle: (v) => ipcRenderer.send("pt:notify-style", v),
   onFocus: (cb) => {
     const f = (_e, s) => cb(s);
     ipcRenderer.on("pt:focus", f);

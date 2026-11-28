@@ -6,15 +6,15 @@ const fs = require("fs");
 const path = require("path");
 
 const file = () => path.join(app.getPath("userData"), "focus.json");
-let state = { until: 0, allowImportant: true }; // until: ms; Infinity = tới khi tự tắt; 0 = đang tắt
+let state = { until: 0, allowImportant: true, style: "both" }; // style: both | silent (chỉ hiện, không tiếng) | sound (chỉ tiếng, không hiện) // until: ms; Infinity = tới khi tự tắt; 0 = đang tắt
 try {
   const s = JSON.parse(fs.readFileSync(file(), "utf8"));
-  state = { until: s.until === "forever" ? Infinity : Number(s.until) || 0, allowImportant: s.allowImportant !== false };
+  state = { until: s.until === "forever" ? Infinity : Number(s.until) || 0, allowImportant: s.allowImportant !== false, style: ["both", "silent", "sound"].includes(s.style) ? s.style : "both" };
 } catch {}
 
 const save = () => {
   try {
-    fs.writeFileSync(file(), JSON.stringify({ until: state.until === Infinity ? "forever" : state.until, allowImportant: state.allowImportant }));
+    fs.writeFileSync(file(), JSON.stringify({ until: state.until === Infinity ? "forever" : state.until, allowImportant: state.allowImportant, style: state.style }));
   } catch {}
 };
 
@@ -52,6 +52,14 @@ function set(mode) {
   onChange();
 }
 
+/** kiểu báo: "both" tiếng + thông báo, "silent" chỉ hiện thông báo, "sound" chỉ có tiếng */
+function setStyle(v) {
+  state.style = ["both", "silent", "sound"].includes(v) ? v : "both";
+  save();
+  onChange();
+}
+const style = () => state.style;
+
 function setAllowImportant(v) {
   state.allowImportant = !!v;
   save();
@@ -75,7 +83,7 @@ function untilLabel() {
 }
 
 function info() {
-  return { on: isOn(), until: isOn() ? (state.until === Infinity ? null : state.until) : 0, label: untilLabel(), allowImportant: state.allowImportant };
+  return { on: isOn(), until: isOn() ? (state.until === Infinity ? null : state.until) : 0, label: untilLabel(), allowImportant: state.allowImportant, style: state.style };
 }
 
 /** các mục cho menu thanh menu / khay */
@@ -101,6 +109,14 @@ function menuItems() {
         { label: "Nhắc nhở hẹn giờ vẫn reo", enabled: false },
       ],
     },
+    {
+      label: state.style === "silent" ? "🔕 Kiểu báo · chỉ thông báo" : state.style === "sound" ? "🔔 Kiểu báo · chỉ âm thanh" : "🔔 Kiểu báo · tiếng + thông báo",
+      submenu: [
+        { label: "Âm thanh + thông báo", type: "radio", checked: state.style === "both", click: () => setStyle("both") },
+        { label: "Tắt tiếng (chỉ hiện thông báo)", type: "radio", checked: state.style === "silent", click: () => setStyle("silent") },
+        { label: "Chỉ có tiếng (không hiện thông báo)", type: "radio", checked: state.style === "sound", click: () => setStyle("sound") },
+      ],
+    },
   ];
 }
 
@@ -109,4 +125,4 @@ function init(cb) {
   arm();
 }
 
-module.exports = { init, isOn, set, setAllowImportant, blocks, info, menuItems };
+module.exports = { init, isOn, set, setAllowImportant, setStyle, style, blocks, info, menuItems };
